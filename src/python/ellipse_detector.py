@@ -33,6 +33,7 @@ class EllipseDetector():
         self.output_img = output_img
         self.generate_pgm()
         self.elsdc()
+        self.read_result()
 
     def generate_pgm(self):
         image = self.resize(self.image, self.max_height, self.max_width)
@@ -44,7 +45,13 @@ class EllipseDetector():
         command = subprocess.run([self.elsdc_path, self.intermediate_path], stdout=subprocess.PIPE, text=True)
         if command.returncode:
             raise Exception('Faild to run elsdc.')
-    
+
+    def read_result(self):
+        file = open('out_ellipse.txt')
+        collection = [ [float(number) for number in ellipse.split()] for ellipse in file.read().splitlines() ]
+        for ellipse in collection:
+            self.ellipse_collection.append(Ellipse(ellipse))
+        subprocess.run(['rm', 'out_ellipse.txt'])
 
     def red_mask(self, image):
         '''
@@ -87,4 +94,17 @@ class EllipseDetector():
             return cv2.resize(image, (int( max_width), int(height * max_width / width)))
         return cv2.resize(image, (int(max_width), int(max_height)))
 
+class Ellipse():
+    def __init__(self, data_list):
+        self.x1 = data_list[0]
+        self.y1 = data_list[1]
+        self.x2 = data_list[2]
+        self.y2 = data_list[3]
+        self.center_x = data_list[4]
+        self.center_y = data_list[5]
+        self.ax = data_list[6]
+        self.bx = data_list[7]
+        self.theta = data_list[8]
+        self.angle_start = data_list[9]
+        self.angle_end = data_list[10]
     
