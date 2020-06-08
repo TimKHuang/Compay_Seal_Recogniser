@@ -1,12 +1,12 @@
 from cv2 import cv2
 import numpy as np
-import math
 import subprocess
 
 class EllipseDetector():
     
     # image
     image = None
+    resized_image = None
     # The List of Ellipse detected
     ellipse_collection = []
     # HSV threshold
@@ -17,9 +17,9 @@ class EllipseDetector():
     value_low = 5
     value_high = 255
     # The minimum randian of an arc
-    min_radian = math.pi * 0.1
+    min_radian = np.pi * 0.1
     # The minimum radius relative to the biggest ellipse detected
-    min_relative_radius = 0.5
+    min_relative_radius = 0.8
     # path
     output_img = ''
     intermediate_path = 'images/intermediate/in.pgm'
@@ -34,12 +34,13 @@ class EllipseDetector():
         self.generate_pgm()
         self.elsdc()
         self.read_result()
+        self.select()
+        self.output()
 
     def generate_pgm(self):
-        image = self.resize(self.image, self.max_height, self.max_width)
-        mask = self.red_mask(image)
-        gray_image = cv2.cvtColor(self.copy(image, mask=mask), cv2.COLOR_BGR2GRAY)
-        cv2.imwrite(self.intermediate_path, self.erode(gray_image))
+        self.resized_image = self.resize(self.image, self.max_height, self.max_width)
+        gray_image = cv2.cvtColor(self.resized_image, cv2.COLOR_BGR2GRAY)
+        cv2.imwrite(self.intermediate_path, gray_image)
     
     def elsdc(self):
         command = subprocess.run([self.elsdc_path, self.intermediate_path], stdout=subprocess.PIPE, text=True)
@@ -52,6 +53,63 @@ class EllipseDetector():
         for ellipse in collection:
             self.ellipse_collection.append(Ellipse(ellipse))
         subprocess.run(['rm', 'out_ellipse.txt'])
+
+    def select(self):
+        max_radius = 0
+
+        # remove the ellipse with too small radian
+        index = 0
+        while index < len(self.ellipse_collection):
+            ellipse = self.ellipse_collection[index]
+            randian = ellipse.angle_end - ellipse.angle_start
+            if randian < 0:
+                randian += np.pi*2
+            if randian < self.min_radian:
+                self.ellipse_collection.pop(index)
+                continue
+            max_radius = max([max_radius, ellipse.major_axis])
+            index += 1
+        
+        # remove the ellipse with too small radius
+        index = 0
+        while index < len(self.ellipse_collection):
+            ellipse = self.ellipse_collection[index]
+            if ellipse.major_axis < max_radius * self.min_relative_radius:
+                self.ellipse_collection.pop(index)
+                continue
+            index += 1
+        
+        # if two ellipse center are close to each other, remove the one with shorter major radius
+        index = 0
+        while index < len(self.ellipse_collection):
+            index2 = index + 1
+            while index2 < len(self.ellipse_collection):
+                ellipse1 = self.ellipse_collection[index]
+                ellipse2 = self.ellipse_collection[index2]
+                distance = (ellipse1.center_x - ellipse2.center_x)**2 + (ellipse1.center_y - ellipse2.center_y)**2
+                parameter = (min(ellipse1.minor_axis, ellipse2.minor_axis))**2
+                if distance > parameter:
+                    index2 += 1
+                    continue
+                if ellipse1.major_axis > ellipse2.major_axis:
+                    self.ellipse_collection.pop(index2)
+                    continue
+                self.ellipse_collection.pop(index)
+                index -= 1
+                break
+            index += 1
+                
+    def output(self):
+        circled_image = self.resized_image.copy()
+        for ellipse in self.ellipse_collection:
+            circled_image = cv2.ellipse(circled_image,\
+                (int(ellipse.center_x), int(ellipse.center_y)), \
+                (int(ellipse.major_axis), int(ellipse.minor_axis)), \
+                ellipse.theta, 0, 360, \
+                (255, 0,0), thickness=2, lineType= cv2.LINE_8)
+        cv2.imshow('test', circled_image)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
     def red_mask(self, image):
         '''
@@ -102,9 +160,8 @@ class Ellipse():
         self.y2 = data_list[3]
         self.center_x = data_list[4]
         self.center_y = data_list[5]
-        self.ax = data_list[6]
-        self.bx = data_list[7]
+        self.major_axis = data_list[6]
+        self.minor_axis = data_list[7]
         self.theta = data_list[8]
         self.angle_start = data_list[9]
         self.angle_end = data_list[10]
-    
