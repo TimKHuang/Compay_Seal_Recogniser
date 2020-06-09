@@ -21,16 +21,16 @@ class EllipseDetector():
     # The minimum radius relative to the biggest ellipse detected
     min_relative_radius = 0.8
     # path
-    output_img = ''
+    output_path = ''
     intermediate_path = 'images/intermediate/in.pgm'
     elsdc_path = 'src/ELSDC/elsdc'
-    # output size
+    # process size
     max_height = 900
     max_width = 1200
 
-    def __call__(self, input_img, output_img):
+    def __call__(self, input_img, output_path):
         self.image = cv2.imread(input_img)
-        self.output_img = output_img
+        self.output_path = output_path
         self.generate_pgm()
         self.elsdc()
         self.read_result()
@@ -100,6 +100,12 @@ class EllipseDetector():
             index += 1
                 
     def output(self):
+        scale = self.image.shape[0] / self.resized_image.shape[0]
+        # save each ellipse
+        for i in range(len(self.ellipse_collection)):
+            self.save_image(self.ellipse_collection[i], scale, self.output_path + str(i) + '.png')
+        
+        # save the labled graph
         circled_image = self.resized_image.copy()
         for ellipse in self.ellipse_collection:
             circled_image = cv2.ellipse(circled_image,\
@@ -107,9 +113,24 @@ class EllipseDetector():
                 (int(ellipse.major_axis), int(ellipse.minor_axis)), \
                 ellipse.theta, 0, 360, \
                 (255, 0,0), thickness=2, lineType= cv2.LINE_8)
-        cv2.imshow('test', circled_image)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        cv2.imwrite(self.output_path + 'labled.png', circled_image)
+
+    def save_image(self, ellipse, resize_scale, name):
+        # get the orginal shape to prevent overflow
+        (height, width, _) = self.image.shape
+        # get the coordinate of the center at the original graph
+        center_x = ellipse.center_x * resize_scale
+        center_y = ellipse.center_y * resize_scale
+        # get the area to cut
+        edge_length = int(ellipse.major_axis * 2 * resize_scale * 1.5)
+        output = np.zeros((edge_length, edge_length, 3), dtype=np.uint8)
+        for x in range(edge_length):
+            for y in range(edge_length):
+                origin_x = int(center_x - edge_length / 2 + x)
+                origin_y = int(center_y - edge_length / 2 + y)
+                if origin_x >= 0 and origin_y >=0 and origin_x < width and origin_y < height: 
+                    output[y, x] = self.image[origin_y, origin_x]
+        cv2.imwrite(name, output)
 
     def red_mask(self, image):
         '''
