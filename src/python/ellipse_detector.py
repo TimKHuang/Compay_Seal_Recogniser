@@ -9,13 +9,6 @@ class EllipseDetector():
     resized_image = None
     # The List of Ellipse detected
     ellipse_collection = []
-    # HSV threshold
-    hue_low = 30
-    hue_high = 170
-    saturation_low = 10
-    saturation_high = 255
-    value_low = 5
-    value_high = 255
     # The minimum randian of an arc
     min_radian = np.pi * 0.1
     # The minimum radius relative to the biggest ellipse detected
@@ -32,17 +25,17 @@ class EllipseDetector():
         self.image = cv2.imread(input_img)
         self.output_path = output_path
         self.generate_pgm()
-        self.elsdc()
+        self.run_elsdc()
         self.read_result()
         self.select()
-        self.output()
+        return self.output()
 
     def generate_pgm(self):
         self.resized_image = self.resize(self.image, self.max_height, self.max_width)
         gray_image = cv2.cvtColor(self.resized_image, cv2.COLOR_BGR2GRAY)
         cv2.imwrite(self.intermediate_path, gray_image)
     
-    def elsdc(self):
+    def run_elsdc(self):
         command = subprocess.run([self.elsdc_path, self.intermediate_path], stdout=subprocess.PIPE, text=True)
         if command.returncode:
             raise Exception('Faild to run elsdc.')
@@ -101,10 +94,7 @@ class EllipseDetector():
                 
     def output(self):
         scale = self.image.shape[0] / self.resized_image.shape[0]
-        # save each ellipse
-        for i in range(len(self.ellipse_collection)):
-            self.save_image(self.ellipse_collection[i], scale, self.output_path + str(i) + '.png')
-        
+
         # save the labled graph
         circled_image = self.resized_image.copy()
         for ellipse in self.ellipse_collection:
@@ -115,7 +105,13 @@ class EllipseDetector():
                 (255, 0,0), thickness=2, lineType= cv2.LINE_8)
         cv2.imwrite(self.output_path + 'labled.png', circled_image)
 
-    def save_image(self, ellipse, resize_scale, name):
+        collection = []
+        # save each ellipse
+        for i in range(len(self.ellipse_collection)):
+            collection.append(self.extract_ellipse(self.ellipse_collection[i], scale))
+        return collection
+
+    def extract_ellipse(self, ellipse, resize_scale):
         # get the orginal shape to prevent overflow
         (height, width, _) = self.image.shape
         # get the coordinate of the center at the original graph
@@ -130,25 +126,7 @@ class EllipseDetector():
                 origin_y = int(center_y - edge_length / 2 + y)
                 if origin_x >= 0 and origin_y >=0 and origin_x < width and origin_y < height: 
                     output[y, x] = self.image[origin_y, origin_x]
-        cv2.imwrite(name, output)
-
-    def red_mask(self, image):
-        '''
-        It will choose the range that is larger than the high_threshold
-        and smaller than the low_threshold so it is only suitable for red extraction.
-        '''
-        hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        (height, width, _) = hsv_image.shape
-
-        mask = np.zeros((height, width))
-        for y in range(height):
-            for x in range(width):
-                hsv = hsv_image[y, x]
-                if (hsv[0] <= self.hue_low or hsv[0] >= self.hue_high) and \
-                    (hsv[1] <= self.saturation_high and hsv[1] >= self.saturation_low) and \
-                    (hsv[2] <= self.value_high and hsv[2] >= self.value_low):
-                    mask[y, x] = 255
-        return mask
+        return output
 
     def copy(self, image, mask = None):
         copy = image.copy()
@@ -160,10 +138,6 @@ class EllipseDetector():
                         continue
                     copy[y, x] = [0, 0, 0]
         return copy
-
-    def erode(self, image):
-        kerenal = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-        return cv2.erode(image, kerenal, iterations=2)
             
     def resize(self, image, max_height, max_width, keep_ratio = True):
         (height, width, _) = image.shape
