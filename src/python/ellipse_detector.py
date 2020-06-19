@@ -21,7 +21,12 @@ class EllipseDetector():
     max_height = 900
     max_width = 1200
 
-    def __call__(self, input_img, output_path):
+    def __init__(self):
+        self.image = None
+        self.resized_image = None
+        self.ellipse_collection = []
+
+    def __call__(self, input_img, output_path = 'images/output/'):
         self.image = cv2.imread(input_img)
         self.output_path = output_path
         self.generate_pgm()
